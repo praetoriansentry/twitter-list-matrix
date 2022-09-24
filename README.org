@@ -13,3 +13,19 @@
 #+LaTeX_CLASS_OPTIONS: [letterpaper]
 
 Utility to cross reference lists with who I follow
+
+
+
+Example private.env file:
+#+begin_src text
+TWITTER_API_KEY=...
+TWITTER_API_SECRET=...
+TWTTIER_API_TOKEN=...
+#+end_src
+* 
+Loading environment variables:
+#+begin_src shell
+set -a
+source private.env
+set +a
+#+end_src
