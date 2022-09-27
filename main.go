@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,11 +33,114 @@ func (a authorize) Add(req *http.Request) {
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", a.Token))
 }
 
+func hasRunPreviously() (following []*twitter.UserObj, lists []*twitter.ListObj, listMembers map[string][]*twitter.UserObj, hasRun bool) {
+	hasRun = false
+	followingFile, err := os.Open("following.json")
+	if err != nil {
+		return
+	}
+	defer followingFile.Close()
+	listsFile, err := os.Open("lists.json")
+	if err != nil {
+		return
+	}
+	defer listsFile.Close()
+	listMembersFile, err := os.Open("listmembers.json")
+	if err != nil {
+		return
+	}
+	defer listMembersFile.Close()
+
+	followingData, err := io.ReadAll(followingFile)
+	if err != nil {
+		return
+	}
+	listsData, err := io.ReadAll(listsFile)
+	if err != nil {
+		return
+	}
+	listMembersData, err := io.ReadAll(listMembersFile)
+	if err != nil {
+		return
+	}
+
+	following = make([]*twitter.UserObj, 0)
+	err = json.Unmarshal(followingData, &following)
+	if err != nil {
+		return
+	}
+	lists = make([]*twitter.ListObj, 0)
+	err = json.Unmarshal(listsData, &lists)
+	if err != nil {
+		return
+	}
+	listMembers = make(map[string][]*twitter.UserObj, 0)
+	err = json.Unmarshal(listMembersData, &listMembers)
+	if err != nil {
+		return
+	}
+	hasRun = true
+	return
+}
+
+func processLists(following []*twitter.UserObj, lists []*twitter.ListObj, listMembers map[string][]*twitter.UserObj) {
+	// numLists := len(lists)
+	records := make([][]string, 0)
+
+	header := []string{"username", "name"}
+	for _, v := range lists {
+		header = append(header, v.Name)
+	}
+	records = append(records, header)
+
+	for _, f := range following {
+		row := []string{f.UserName, f.Name}
+		for _, v := range lists {
+			isInList := false
+			for _, ele := range listMembers[v.ID] {
+				if f.ID == ele.ID {
+					isInList = true
+					break
+				}
+			}
+			if isInList {
+				row = append(row, "1")
+			} else {
+				row = append(row, "0")
+			}
+		}
+
+		ut := fmt.Sprintf("%s %s", f.UserName, f.Name)
+		log.Trace().Str("username", f.UserName).Str("name", f.Name).Str("id", f.ID).Msg(ut)
+		records = append(records, row)
+	}
+	matrix, err := os.Create("matrix.csv")
+	if err != nil {
+		log.Error().Err(err).Msg("Unable to open csv")
+		return
+	}
+
+	writer := csv.NewWriter(matrix)
+	err = writer.WriteAll(records)
+	if err != nil {
+		log.Error().Err(err).Msg("Unable to write records")
+		return
+	}
+	writer.Flush()
+	matrix.Close()
+}
+
 func main() {
 	ctx := context.Background()
 	zerolog.SetGlobalLevel(zerolog.TraceLevel)
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 	log.Trace().Msg("Starting...")
+
+	prevFollowing, prevLists, prevListMembers, hasRun := hasRunPreviously()
+	if hasRun {
+		processLists(prevFollowing, prevLists, prevListMembers)
+		return
+	}
 
 	tok := getToken()
 	c := getClient(tok.AccessToken)
