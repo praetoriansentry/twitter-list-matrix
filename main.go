@@ -252,8 +252,12 @@ func main() {
 			}
 			log.Trace().Str("listid", list.ID).Str("pagetoken", lumo.PaginationToken).Msg("Received Response")
 			waitForRateLimit(listMembersResp.RateLimit)
-			listMembers = append(listMembers, listMembersResp.Raw.Users...)
-			lumo.PaginationToken = listMembersResp.Meta.NextToken
+			if listMembersResp.Raw == nil || listMembersResp.Raw.Users == nil {
+				log.Warn().Str("listid", list.ID).Str("name", list.Name).Msg("Empty raw/user response")
+			} else {
+				listMembers = append(listMembers, listMembersResp.Raw.Users...)
+				lumo.PaginationToken = listMembersResp.Meta.NextToken
+			}
 			if listMembersResp.Meta.NextToken == "" {
 				break
 			}
